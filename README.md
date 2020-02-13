@@ -11,7 +11,7 @@ parameters.  See below for more information.
 
 ```go
 func makeNetworkCall(ctx context.Context) {
-    defaultBackoff := retry.DefaultBackoff.Clone()
+    defaultBackoff := retry.DefaultBackoff()
 
     // try at most 5 times
     retry.Retry(ctx, defaultBackoff, 5, func(ctx context.Context) error {
