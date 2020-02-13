@@ -39,9 +39,15 @@ type Backoff struct {
 	ExpFactor float64
 }
 
-// DefaultBackoff is a resonable default backoff instance. It should not be
-// used directly, but should instead be copied first.
-var DefaultBackoff Backoff
+// DefaultBackoff returns a resonable default backoff instance.
+func DefaultBackoff() Backoff {
+	return Backoff{
+		MaxBackoff: time.Minute,
+		MinBackoff: time.Millisecond,
+		Jitter:     .1,
+		ExpFactor:  1.2,
+	}
+}
 
 // Clone returns a cloned copy of a Backoff struct.
 func (b Backoff) Clone() Backoff {
@@ -128,13 +134,4 @@ func (b *Backoff) Next() time.Duration {
 	backoff := b.BackoffN(b.step)
 	b.step++
 	return backoff
-}
-
-func init() {
-	DefaultBackoff = Backoff{
-		MaxBackoff: time.Minute,
-		MinBackoff: time.Millisecond,
-		Jitter:     .1,
-		ExpFactor:  1.2,
-	}
 }

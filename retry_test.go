@@ -28,7 +28,7 @@ func TestRetryCancel(t *testing.T) {
 	t.Parallel()
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	c := make(chan bool)
-	backoff := DefaultBackoff
+	backoff := DefaultBackoff()
 	backoff.MinBackoff = time.Microsecond
 
 	go func() {
@@ -54,7 +54,7 @@ func TestRetry(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	c := make(chan bool)
-	backoff := DefaultBackoff
+	backoff := DefaultBackoff()
 	backoff.MinBackoff = time.Microsecond
 
 	go func() {
@@ -79,7 +79,7 @@ func TestRetryUntilExhausted(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	c := make(chan bool)
-	backoff := DefaultBackoff
+	backoff := DefaultBackoff()
 	backoff.MinBackoff = time.Microsecond
 
 	go func() {
