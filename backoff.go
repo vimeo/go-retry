@@ -39,7 +39,7 @@ type Backoff struct {
 	ExpFactor float64
 }
 
-// DefaultBackoff returns a resonable default backoff instance.
+// DefaultBackoff returns a reasonable default backoff instance.
 func DefaultBackoff() Backoff {
 	return Backoff{
 		MaxBackoff: time.Minute,
