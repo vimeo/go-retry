@@ -37,7 +37,7 @@ type Retryable struct {
 // NewRetryable returns a newly constructed Retryable instance
 func NewRetryable(MaxSteps int32) *Retryable {
 	return &Retryable{
-		B:           DefaultBackoff,
+		B:           DefaultBackoff(),
 		ShouldRetry: nil,
 		MaxSteps:    MaxSteps,
 	}
