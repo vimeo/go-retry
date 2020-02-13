@@ -28,7 +28,7 @@ import (
 type Backoff struct {
 	step int
 	// If MaxBackoff == MinBackoff the backoff is constant.
-	// If MaxBackoff > MinBackoff, the implementation may generate a runtime panic.
+	// If MinBackoff > MaxBackoff, the implementation may generate a runtime panic.
 	MaxBackoff time.Duration
 	MinBackoff time.Duration
 	// Jitter is the maximum value that may be added or substracted based on

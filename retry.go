@@ -20,10 +20,11 @@ import (
 	"time"
 )
 
-// Retryable is a
+// Retryable manages the operations of a retryable operation.
 type Retryable struct {
 	// Backoff parameters to use for retry
 	B Backoff
+
 	// ShouldRetry is a filter function to indicate whether to continue
 	// iterating based on the error.
 	// An implementation that uniformly returns true is used if nil
