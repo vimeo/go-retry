@@ -17,7 +17,8 @@ package retry
 import (
 	"context"
 	"fmt"
-	"time"
+
+	clocks "github.com/vimeo/go-clocks"
 )
 
 // Retryable manages the operations of a retryable operation.
@@ -32,6 +33,10 @@ type Retryable struct {
 
 	// Maximum retry attempts
 	MaxSteps int32
+
+	// Clock provides a clock to use when backing off (if nil, uses
+	// github.com/vimeo/go-clocks.DefaultClock())
+	Clock clocks.Clock
 }
 
 // NewRetryable returns a newly constructed Retryable instance
@@ -40,7 +45,15 @@ func NewRetryable(MaxSteps int32) *Retryable {
 		B:           DefaultBackoff(),
 		ShouldRetry: nil,
 		MaxSteps:    MaxSteps,
+		Clock:       clocks.DefaultClock(),
 	}
+}
+
+func (r *Retryable) clock() clocks.Clock {
+	if r.Clock == nil {
+		return clocks.DefaultClock()
+	}
+	return r.Clock
 }
 
 // Retry calls the function `f` at most `MaxSteps` times using the exponential
@@ -64,10 +77,7 @@ func (r *Retryable) Retry(ctx context.Context, f func(context.Context) error) er
 			return err
 		}
 		errors = append(errors, err)
-		select {
-		case <-time.After(b.Next()):
-			continue
-		case <-ctx.Done():
+		if !r.clock().SleepFor(ctx, b.Next()) {
 			return fmt.Errorf(
 				"context expired while retrying: %s. retried %d times",
 				ctx.Err(), n)
@@ -79,8 +89,9 @@ func (r *Retryable) Retry(ctx context.Context, f func(context.Context) error) er
 // Retry calls the function `f` at most `steps` times using the exponential
 // backoff parameters defined in `b`, or until the context expires.
 func Retry(ctx context.Context, b Backoff, steps int, f func(context.Context) error) error {
-	// Make sure b is clean.
+	// Make sure b is clean (it's passed by value so there are no
+	// observable effects of this).
 	b.Reset()
-	r := Retryable{B: b, MaxSteps: int32(steps)}
+	r := Retryable{B: b, MaxSteps: int32(steps), Clock: clocks.DefaultClock()}
 	return r.Retry(ctx, f)
 }
