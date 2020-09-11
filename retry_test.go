@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/vimeo/go-clocks/fake"
 )
 
 func TestRetryCancel(t *testing.T) {
@@ -53,7 +54,7 @@ func TestRetryCancel(t *testing.T) {
 func TestRetry(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := make(chan bool)
+	c := make(chan struct{})
 	backoff := DefaultBackoff()
 	backoff.MinBackoff = time.Microsecond
 
@@ -71,14 +72,12 @@ func TestRetry(t *testing.T) {
 		close(c)
 	}()
 	<-c
-	for range c {
-	}
 }
 
 func TestRetryUntilExhausted(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := make(chan bool)
+	c := make(chan struct{})
 	backoff := DefaultBackoff()
 	backoff.MinBackoff = time.Microsecond
 
@@ -93,6 +92,47 @@ func TestRetryUntilExhausted(t *testing.T) {
 		close(c)
 	}()
 	<-c
-	for range c {
+}
+
+func TestRetriableWithFakeClock(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	c := make(chan struct{})
+	backoff := Backoff{
+		// Use large time-intervals since we're using a fake clock
+		MaxBackoff: time.Hour * 20,
+		MinBackoff: time.Hour,
+		Jitter:     0.1,
+		ExpFactor:  1.1,
 	}
+
+	fc := fake.NewClock(time.Now())
+
+	go func() {
+		q := 0
+		r := NewRetryable(18)
+		r.Clock = fc
+		r.B = backoff
+		err := r.Retry(ctx, func(ctx context.Context) error {
+			q++
+			if q == 3 {
+				return nil
+			}
+			return fmt.Errorf("foo")
+		})
+		assert.NoError(t, err)
+		assert.Equal(t, 3, q)
+		close(c)
+	}()
+	// Wait for the goroutine to go to sleep
+	fc.AwaitSleepers(1)
+	// Advance the clock by 10 hrs so we're guaranteed to wake up
+	assert.EqualValues(t, 1, fc.Advance(time.Hour*10))
+	// wait for it to back to sleep again since the error fails the first two times.
+	fc.AwaitSleepers(1)
+	// Advance the clock by 10 hrs so we're guaranteed to wake up
+	assert.EqualValues(t, 1, fc.Advance(time.Hour*10))
+	// this time, we should succeed; await goroutine exit.
+
+	<-c
 }
