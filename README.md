@@ -14,13 +14,17 @@ func makeNetworkCall(ctx context.Context) {
     defaultBackoff := retry.DefaultBackoff()
 
     // try at most 5 times
-    retry.Retry(ctx, defaultBackoff, 5, func(ctx context.Context) error {
+    getErr := retry.Retry(ctx, defaultBackoff, 5, func(ctx context.Context) error {
         response, err := http.Get("https://my.favorite.service")
         if err != nil {
             return err
         }
         // do something with response...
     })
+
+    if getErr != nil {
+        // get failed, even after all the retries
+    }
 }
 ```
 
