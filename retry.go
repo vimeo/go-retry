@@ -16,7 +16,9 @@ package retry
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	clocks "github.com/vimeo/go-clocks"
 )
@@ -67,7 +69,7 @@ func (r *Retryable) Retry(ctx context.Context, f func(context.Context) error) er
 			return true
 		}
 	}
-	errors := make([]error, 0, 0)
+	errors := &Errors{}
 	for n := int32(0); n < r.MaxSteps; n++ {
 		err := f(ctx)
 		if err == nil {
@@ -76,14 +78,18 @@ func (r *Retryable) Retry(ctx context.Context, f func(context.Context) error) er
 		if !filter(err) {
 			return err
 		}
-		errors = append(errors, err)
+		errors.Errs = append(errors.Errs, &Error{
+			When: r.clock().Now(),
+			Err:  err,
+		})
 		if !r.clock().SleepFor(ctx, b.Next()) {
-			return fmt.Errorf(
-				"context expired while retrying: %s. retried %d times",
-				ctx.Err(), n)
+			return &CtxErrors{
+				Errors: errors,
+				CtxErr: ctx.Err(),
+			}
 		}
 	}
-	return fmt.Errorf("aborting retry. errors: %+v", errors)
+	return errors
 }
 
 // Retry calls the function `f` at most `steps` times using the exponential
@@ -94,4 +100,69 @@ func Retry(ctx context.Context, b Backoff, steps int, f func(context.Context) er
 	b.Reset()
 	r := Retryable{B: b, MaxSteps: int32(steps), Clock: clocks.DefaultClock()}
 	return r.Retry(ctx, f)
+}
+
+// Error is an error that occurs at a particular time.
+type Error struct {
+	// When is when the error occured in the retry cycle.
+	When time.Time
+
+	// Err is the underlying error.
+	Err error
+}
+
+// Unwrap follows go-1.13-style wrapping semantics.
+func (e *Error) Unwrap() error {
+	return e.Err
+}
+
+// Error implements the error interface.
+func (e *Error) Error() string {
+	return fmt.Sprintf("Error at %s: %s", e.When, e.Err.Error())
+}
+
+// Errors is a collection errors that happen across multiple retries.
+type Errors struct {
+	Errs []*Error
+}
+
+// Unwrap returns the most recent error that occured during retrying.
+func (e *Errors) Unwrap() error {
+	return e.Errs[len(e.Errs)-1]
+}
+
+// Is will return true if any of the underlying errors matches the target.  See
+// https://golang.org/pkg/errors/#Is
+func (e *Errors) Is(target error) bool {
+	for _, err := range e.Errs {
+		if errors.Is(err, target) {
+			return true
+		}
+	}
+	return false
+}
+
+// As will return true if any of the underlying errors matches the target and
+// sets the argument to that error specifically.  It returns false otherwise,
+// leaving the argument unchanged.  See https://golang.org/pkg/errors/#As
+func (e *Errors) As(target interface{}) bool {
+	for _, err := range e.Errs {
+		if errors.As(err, target) {
+			return true
+		}
+	}
+	return false
+}
+
+// Error implements the error interface.
+func (e *Errors) Error() string {
+	return fmt.Sprintf("errors retrying: %+v", e.Errs)
+}
+
+// CtxErrors bundles together Errors and a Ctx error to differentiate the errors
+// that fail due to context expiration errors from errors that exhaust their
+// maximum number of retries.
+type CtxErrors struct {
+	*Errors
+	CtxErr error
 }

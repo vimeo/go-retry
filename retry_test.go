@@ -16,12 +16,13 @@ package retry
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"regexp"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/vimeo/go-clocks/fake"
 )
 
@@ -37,7 +38,9 @@ func TestRetryCancel(t *testing.T) {
 			c <- true
 			return fmt.Errorf("foo")
 		})
-		assert.Regexp(t, regexp.MustCompile("context expired while retrying: context canceled. retried \\d times"), err)
+		theErr := &CtxErrors{}
+		require.True(t, errors.As(err, &theErr))
+		assert.True(t, len(theErr.Errs) > 0)
 		close(c)
 	}()
 	<-c
@@ -87,8 +90,10 @@ func TestRetryUntilExhausted(t *testing.T) {
 			q++
 			return fmt.Errorf("foo")
 		})
-		assert.EqualError(t, err, "aborting retry. errors: [foo foo foo foo foo foo foo foo]")
-		assert.Equal(t, 8, q)
+
+		theErr := &Errors{}
+		require.True(t, errors.As(err, &theErr))
+		assert.Len(t, theErr.Errs, 8)
 		close(c)
 	}()
 	<-c
@@ -135,4 +140,59 @@ func TestRetriableWithFakeClock(t *testing.T) {
 	// this time, we should succeed; await goroutine exit.
 
 	<-c
+}
+
+func TestErrorsWrapping(t *testing.T) {
+	last := errors.New("this should get unwrapped")
+	errs := &Errors{
+		Errs: []*Error{
+			{Err: errors.New("error")},
+			{Err: errors.New("error")},
+			{Err: last},
+		},
+	}
+
+	assert.True(t, errors.Is(errs, last))
+}
+
+func TestErrorsIs(t *testing.T) {
+	timeout := errors.New("timeout")
+	authFailure := errors.New("auth failed")
+	random := errors.New("foo")
+
+	errs := &Errors{
+		Errs: []*Error{
+			{Err: timeout},
+			{Err: authFailure},
+		},
+	}
+
+	assert.True(t, errors.Is(errs, timeout))
+	assert.True(t, errors.Is(errs, authFailure))
+	assert.False(t, errors.Is(errs, random))
+}
+
+type fooError struct {
+	magicNum int
+	err      error
+}
+
+func (re *fooError) Error() string {
+	return re.err.Error()
+}
+
+func TestErrorsAs(t *testing.T) {
+	timeout := errors.New("timeout")
+	authFailure := errors.New("auth failed")
+
+	errs := &Errors{
+		Errs: []*Error{
+			{Err: &fooError{err: timeout, magicNum: 42}},
+			{Err: authFailure},
+		},
+	}
+
+	var err *fooError
+	require.True(t, errors.As(errs, &err))
+	assert.Equal(t, 42, err.magicNum)
 }
