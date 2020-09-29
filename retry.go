@@ -69,6 +69,18 @@ func (r *Retryable) Retry(ctx context.Context, f func(context.Context) error) er
 			return true
 		}
 	}
+
+	beyondDeadline := func(time.Duration) bool {
+		return false
+	}
+
+	if dl, ok := ctx.Deadline(); ok {
+		beyondDeadline = func(nextStep time.Duration) bool {
+			remaining := r.clock().Until(dl)
+			return remaining < nextStep
+		}
+	}
+
 	errors := &Errors{}
 	for n := int32(0); n < r.MaxSteps; n++ {
 		err := f(ctx)
@@ -82,7 +94,16 @@ func (r *Retryable) Retry(ctx context.Context, f func(context.Context) error) er
 			When: r.clock().Now(),
 			Err:  err,
 		})
-		if !r.clock().SleepFor(ctx, b.Next()) {
+		nextStep := b.Next()
+		// Return immediately if the next step would step us beyond the
+		// deadline (as decided by the clock).
+		if beyondDeadline(nextStep) {
+			return &CtxErrors{
+				Errors: errors,
+				CtxErr: context.DeadlineExceeded,
+			}
+		}
+		if !r.clock().SleepFor(ctx, nextStep) {
 			return &CtxErrors{
 				Errors: errors,
 				CtxErr: ctx.Err(),

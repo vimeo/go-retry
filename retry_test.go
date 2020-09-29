@@ -77,6 +77,50 @@ func TestRetry(t *testing.T) {
 	<-c
 }
 
+func TestRetryUntilDeadlineLooms(t *testing.T) {
+	t.Parallel()
+	fc := fake.NewClock(time.Now())
+
+	ctx, cancel := context.WithDeadline(context.Background(), fc.Now().Add(time.Second))
+	defer cancel()
+	c := make(chan struct{})
+	backoff := DefaultBackoff()
+	backoff.MinBackoff = time.Millisecond * 3
+	backoff.MaxBackoff = time.Second
+	backoff.Jitter = 0.01
+	backoff.ExpFactor = 10
+
+	r := NewRetryable(80)
+	r.Clock = fc
+	r.B = backoff
+
+	go func() {
+		q := 0
+		err := r.Retry(ctx, func(ctx context.Context) error {
+			q++
+			return fmt.Errorf("foo")
+		})
+
+		theErr := &CtxErrors{}
+		require.True(t, errors.As(err, &theErr))
+		assert.EqualValues(t, context.DeadlineExceeded, theErr.CtxErr)
+		assert.Len(t, theErr.Errs, 4)
+		close(c)
+	}()
+
+	fc.AwaitSleepers(1)
+	fc.Advance(time.Millisecond * 4)
+	fc.AwaitSleepers(1)
+	fc.Advance(time.Millisecond * 40)
+	fc.AwaitSleepers(1)
+	fc.Advance(time.Millisecond * 400)
+	// We exit here because the next step would be 1s (mod jitter)
+	// which brings us to 1.444s after the initial start-time, beyond the
+	// 1s timeout.
+
+	<-c
+}
+
 func TestRetryUntilExhausted(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
