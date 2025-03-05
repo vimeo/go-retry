@@ -16,7 +16,6 @@ package retry
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -145,34 +144,6 @@ func (e *Error) Error() string {
 // Errors is a collection errors that happen across multiple retries.
 type Errors struct {
 	Errs []*Error
-}
-
-// Unwrap returns the most recent error that occured during retrying.
-func (e *Errors) Unwrap() error {
-	return e.Errs[len(e.Errs)-1]
-}
-
-// Is will return true if any of the underlying errors matches the target.  See
-// https://golang.org/pkg/errors/#Is
-func (e *Errors) Is(target error) bool {
-	for _, err := range e.Errs {
-		if errors.Is(err, target) {
-			return true
-		}
-	}
-	return false
-}
-
-// As will return true if any of the underlying errors matches the target and
-// sets the argument to that error specifically.  It returns false otherwise,
-// leaving the argument unchanged.  See https://golang.org/pkg/errors/#As
-func (e *Errors) As(target interface{}) bool {
-	for _, err := range e.Errs {
-		if errors.As(err, target) {
-			return true
-		}
-	}
-	return false
 }
 
 // Error implements the error interface.
