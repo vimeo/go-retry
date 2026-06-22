@@ -12,13 +12,13 @@ jobs:
     steps:
 
     - name: Set up Go ${{matrix.goversion}} on ${{matrix.os}}
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@be3c94b385c4f180051c996d336f57a34c397495 # v3
       with:
         go-version: ${{matrix.goversion}}
       id: go
 
     - name: Check out code into the Go module directory
-      uses: actions/checkout@v1
+      uses: actions/checkout@50fbc622fc4ef5163becd7fab6573eac35f8462e # v1
 
     - name: gofmt
       if: ${{matrix.goversion == '1.19'}}
